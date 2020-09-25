@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bow.mappers.board">
+
+	<!-- 페이징 전 게시물 목록
+	<select id="list" resultType="com.bow.domain.BoardVO">
+	 select*
+	 from tbl_board
+	 order by bno desc
+	</select> -->
+	<!-- 게시물 검색만 목록 쿼리 -->
+	<select id="searchlist" resultType="com.bow.domain.BoardVO"
+			parameterType="com.bow.domain.SearchCriteria">
+	    select *
+	       from (
+	           select bno, ref, step, lev, title, password, content, writer, regDate, viewCnt,
+	               show, (select count(*)from tbl_reply where bno=b.bno) as recnt,
+	               b_files, b_file_names,
+	               row_number() over(order by bno desc) as rNum
+	           from tbl_board b
+	           where 1=1
+	           <include refid="search"></include>) tb
+	    order by ref desc, step asc, regdate desc
+	</select>
+	<!-- 페이징 후 게시물 목록 쿼리 -->
+	<select id="listPage" resultType="com.bow.domain.BoardVO"
+			parameterType="com.bow.domain.SearchCriteria">
+	    select *
+	       from (
+	           select bno, ref, step, lev, title, password, content, writer, regDate, viewCnt,
+	               show, (select count(*)from tbl_reply where bno=b.bno) as recnt,
+	               b_files, b_file_names,
+	               row_number() over(order by bno desc) as rNum
+	           from tbl_board b
+	           where 1=1
+	           <include refid="search"></include>) tb
+	    where rNum between #{rowStart} and #{rowEnd}
+	    order by ref desc, step asc, regdate desc
+	   
+	</select>
+	<sql id="search">
+		<if test="searchType != null">
+			<if test="searchType == 't'.toString()">AND TITLE LIKE '%' || #{keyword} || '%'</if>
+			<if test="searchType == 'c'.toString()">AND CONTENT LIKE '%' || #{keyword} || '%'</if>
+			<if test="searchType == 'w'.toString()">AND WRITER LIKE '%' || #{keyword} || '%'</if>
+			<if test="searchType == 'tc'.toString()">AND (TITLE LIKE '%' || #{keyword} || '%') or (CONTENT LIKE '%' || #{keyword} || '%')</if>
+		</if>
+	</sql>
+	<!-- 게시물 작성 -->
+	<insert id="write" parameterType="com.bow.domain.BoardVO"
+			useGeneratedKeys="true" keyProperty="bno">
+		
+		<selectKey keyProperty="bno" resultType="int" order="BEFORE">
+	    	SELECT TBL_BOARD_SEQ.NEXTVAL FROM DUAL
+	    </selectKey>		
+			
+		INSERT INTO TBL_BOARD(
+				BNO, REF, STEP, LEV, TITLE, CONTENT, WRITER, PASSWORD, SHOW, B_FILES, B_FILE_NAMES)
+			VALUES(
+				#{bno},TBL_BOARD_SEQ.CURRVAL, 0, 0,  #{title}, #{content}, #{writer}, #{password}, 'y', #{b_files}, #{b_file_names})
+	</insert>	
+	
+	<!-- 파일첨부 -->
+	<insert id="insertFile" parameterType="hashMap">
+		INSERT INTO TBL_FILE(
+				FNO, BNO, ONAME, SNAME, FSIZE
+		) VALUES(
+			SEQ_TBL_FNO.NEXTVAL, #{bno}, #{oname}, #{sname}, #{fsize}
+		)
+	</insert>
+	
+	<!-- 파일 조회-->
+	<select id="getFileInfo" resultType="com.bow.domain.FileVO" parameterType="int">
+		select * from tbl_file where bno=#{bno}
+	</select>
+	<!-- 파일 다운 -->
+	<select id = "selectFileList" parameterType="hashMap" resultType="hashMap">
+		select oname, sname, form tbl_board where fno = #{fno}
+	</select>
+	<!-- 파일 삭제여부 바꿔주기 -->
+	<update id="ndeleteFile" parameterType="hashMap">
+		update tbl_file set
+		delgb = 'n' where fno=#{fno}
+	</update>
+	<!-- 파일 삭제여부 바꿔주기 -->
+	<update id="ydeleteFile" parameterType="hashMap">
+		update tbl_file set
+		delgb = 'y' where bno=#{bno}
+	</update>
+	<!-- 파일 수정 
+	<insert id="updateFile" parameterType="hashMap">
+		insert into tbl_file(bno, fno, oname, sname, fsize, bno)
+				values(SEQ_TBL_FNO.NEXTVAL, #{sname}, #{fsize}, #{bno})
+	</insert>-->
+	
+	<!-- 파일 삭제-->
+		<delete id="deleteFile" parameterType="int">
+			delete from tbl_file where fno=#{fno}
+		</delete> 
+	
+	<!-- 게시물 상세보기  -->
+	<select id="view" parameterType="int" resultType="com.bow.domain.BoardVO">
+		SELECT 
+			BNO, REF, STEP, LEV, TITLE, CONTENT, WRITER, PASSWORD, REGDATE, VIEWCNT, SHOW, B_FILES, B_FILE_NAMES
+		FROM
+			TBL_BOARD
+		WHERE
+			BNO = #{bno} 
+	</select>
+	
+		<!-- 게시물 수정 -->
+	<update id="modify" parameterType="hashmap">
+		UPDATE TBL_BOARD
+			SET 
+				TITLE = #{title},
+				CONTENT = #{content},
+				WRITER = #{writer},
+				UPDATEDATE = SYSDATE,
+				B_FILES = #{b_files},
+				B_FILE_NAMES = #{b_file_names}
+			WHERE BNO = #{bno}
+	</update>
+
+	<!-- 게시물 삭제 -->
+	<delete id="delete" parameterType="int">
+		DELETE 
+			FROM TBL_BOARD
+		WHERE BNO=#{bno}
+	</delete>
+	
+	<!-- 게시물을 삭제처리 하지 않고, 삭제의 유무 상태만 변경-->
+	<update id="isdelete" parameterType="int">
+		UPDATE TBL_BOARD SET SHOW = 'n' WHERE BNO=#{bno}
+	</update>
+	
+	<!-- 게시물 총 갯수 -->
+	<select id="listCount" resultType ="int" 
+			parameterType = "com.bow.domain.SearchCriteria">
+		select count (bno)
+			from tbl_board
+		where 1=1
+		<include refid="search"></include>
+		and bno >0
+	</select>
+	
+	
+	<!-- 게시판 조회수 -->
+	<update id="viewCnt" parameterType="int">
+		UPDATE TBL_BOARD 
+		SET	VIEWCNT = VIEWCNT+1
+		WHERE BNO = #{bno}
+	</update>
+	
+<!-- 최상위 부모글 번호생성 (1부터 차례대로 최상위 부모글만 생성된다.)   
+	 <select id="getRefMax" resultType="int">
+	  SELECT bno AS REF FROM TBL_BOARD
+	 </select> -->
+
+	<!-- 같은 REF(최상위부모값)을 가진 것 중 현재 답글을 달 게시물의 순번보다 큰것을 +1로 하여 하나씩 밀리게한다 -->
+	<!-- 등록 전 요소 업데이트 -->
+	<update id="updateStep" parameterType="com.bow.domain.BoardVO">
+		UPDATE TBL_BOARD 
+			SET STEP = STEP+1 
+		WHERE REF = #{ref} AND STEP > #{step}
+	</update>
+	 
+	<!-- 답글의 입력 -->
+	<insert id="insertReplyBoard" parameterType="com.bow.domain.BoardVO">
+		INSERT INTO TBL_BOARD(
+				BNO, REF, STEP, LEV, WRITER, PASSWORD, TITLE, CONTENT, SHOW) 
+		VALUES (
+				TBL_BOARD_SEQ.NEXTVAL, #{ref}, #{step}+1, #{lev}+1, #{writer}, #{password}, #{title}, #{content}, 'y'
+		)
+	</insert>
+	<!-- ref 총 갯수 : 글삭제할때 씀 -->
+	<select id="refCount" resultType ="int" 
+			parameterType = "com.bow.domain.BoardVO">
+		select count (*)
+			from tbl_board
+		where ref=#{ref}
+	</select>
+	
+	<!-- 현재 답글의 순번을 생성 은 안썼음-->
+	<select id="getStepMax" parameterType="com.bow.domain.BoardVO"
+			resultType="int">
+		SELECT 
+		DECODE(#{step}, '0', (MAX(STEP)+1), #{step}+1)AS STEP 
+		FROM TBL_BOARD 
+		WHERE REF=#{ref}
+	</select>	 
+	 	
+	 
+</mapper>
